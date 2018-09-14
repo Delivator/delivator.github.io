@@ -1,0 +1,224 @@
+/* Font import */
+@import url('https://fonts.googleapis.com/css?family=Raleway');
+
+body {
+  font-family: 'Raleway', sans-serif;
+  color: #fefefe;
+  background-color: #212121;
+  margin: 0;
+}
+
+#message {
+  display: inline-block;
+}
+
+#videoPlayer {
+  height: 100%;
+  max-height: 100%;
+  max-width: 100%;
+  margin-left: auto;
+  margin-right: auto;
+  display: block;
+  z-index: -2;
+}
+
+input[type="range"] {
+  margin: 0;
+  width: 100%;
+  -webkit-appearance: none;
+  height: 5px;
+  background: #c2c2c2;
+  outline: none;
+  opacity: 0.5;
+  transition: all .2s;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #4cb33e;
+  transition: all .2s;
+}
+
+input[type="range"]:hover {
+  opacity: 1;
+  height: 10px;
+}
+
+
+.container {
+  display: grid;
+  grid-template-columns: 2% auto 2%;
+  grid-template-rows: 2% auto 25px 50px;
+  height: 100vh;
+  transition: .3s filter;
+}
+
+.info {color: #6bff58}
+.error {color: rgb(255, 83, 83)}
+
+.playerControls {
+  display: grid;
+  grid-template-columns: 25px 25px auto 5rem;
+  grid-column-gap: 10px;
+  width: 100%;
+  height: 100%;
+}
+
+.playerControls input[type="button"] {
+  background-color: rgb(128, 128, 128);
+  border: none;
+  border-radius: 50%;
+  width: 100%;
+  height: 100%;
+  text-align: center;
+  transition: all .2s;
+  font-size: 105%;
+  box-shadow: none;
+  background-size: 80%;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+.playerControls input[type="button"]:hover {
+  background-color: #ffffff;
+  box-shadow: 0px 0px 10px rgb(255, 255, 255);
+}
+
+.play {background-image: url("../img/play.svg") !important;}
+.pause {background-image: url("../img/pause.svg") !important;}
+
+.volume {background-image: url("../img/volume.svg");}
+.muted {background-image: url("../img/mute.svg");}
+
+#volume {
+  height: 0px;
+  opacity: 0;
+  width: 25px;
+  -webkit-appearance: slider-vertical;
+  position: absolute;
+  bottom: 35px;
+  transition: all .1s;
+  transition-delay: .5s;
+}
+
+ #volume:hover {
+  height: 125px;
+  opacity: 1;
+  transition-delay: 0s;
+}
+
+#mute:hover + #volume {
+  height: 125px;
+  opacity: 1;
+  transition-delay: 0s;
+}
+
+#fileInput {
+  display: none;
+}
+
+#fileInput + label {
+  background-color: rgb(0, 140, 255);
+  padding: 5px;
+}
+
+label img {
+  vertical-align: text-bottom;
+}
+
+.bottom-bar {
+  grid-row: 4;
+  grid-column: 2;
+  display: grid;
+  grid-template-columns: 300px auto 300px 300px auto;
+}
+
+.bottom-bar div {
+  align-self: center;
+  position: relative;
+}
+
+.upload p {
+  margin: 0;
+}
+
+.time-input input[type="number"] {
+  max-width: 100px;
+  background-color: transparent;
+  color: #fff;
+  font-size: 110%;
+  border: none;
+}
+
+.time-input input[type="button"], #generate, #settings {
+  background-color: rgb(0, 140, 255);
+  color: #fff;
+  font-size: 105%;
+  border: none;
+  padding: 5px;
+}
+
+.timeline {
+  grid-column: 3;
+  position: relative;
+}
+
+.timeline-marker {
+  position: absolute;
+  z-index: -1;
+  bottom: 7px;
+  transition: bottom .2s;
+}
+
+.timeline:hover .timeline-marker {
+  bottom: 13px;
+}
+
+#marker-start {
+  left: -12px;
+}
+
+#marker-end {
+  left: calc(100% - 12px);
+}
+
+.blurred {
+  filter: blur(4px);
+}
+
+.modal {
+  position: fixed;
+  height: 100vh;
+  width: 100vw;
+  display: grid;
+  grid-template-rows: auto 300px auto;
+  grid-template-columns: auto 500px auto;
+  z-index: 100;
+  opacity: 0;
+  visibility: hidden;
+  transition: .3s all;
+}
+
+.modal-toggled {
+  visibility: visible;
+  opacity: 1;
+}
+
+#modal-output div {
+  grid-row: 2;
+  grid-column: 2;
+  align-self: center;
+  background-color: rgba(0, 0, 0, 0.5);
+  height: 100%;
+  width: 100%;
+  padding: 10px;
+}
+
+#modal-output div pre {
+  word-wrap: break-word;
+  font-family: Courier New, Courier, monospace;
+  white-space: pre-wrap;
+}
