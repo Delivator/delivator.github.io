@@ -1,0 +1,12 @@
+body {
+  margin: 0;
+  font-family: 'Open Sans', sans-serif;
+  background-color: #212121;
+  color: #ffffff;
+}
+
+.header {
+  text-align: center;
+  margin-top: 50vh;
+  font-size: 500%;
+}
