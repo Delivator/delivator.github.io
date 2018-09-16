@@ -1,54 +1,57 @@
 <!DOCTYPE html>
 <html>
-  <head>
-    <!-- meta-tags -->
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-    <title>Google Drive Direct Link Generator</title>
-    <link rel="icon" href="favicon.png">
-    <!-- Import Google Icon Font -->
-    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
-    <!-- Import materialize.css-->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/materialize/0.98.2/css/materialize.min.css">
-    <link rel="stylesheet" href="../css/direct-drive-generator.css">
-  </head>
-  <body>
-    <div class="container" id="main" style="margin-top: 80.5px;">
-      <div class="row">
-        <div class="col l6 offset-l3 m8 offset-m2 s12">
-          <div class="card">
-            <div class="teal card-content white-text">
-              <span class="card-title">Google Drive Direct Link Generator</span>
-            </div>
-            <div class="card-content">
-              <div id="link-card">
-                <div>
-                  <ul class="collapsible" data-collapsible="expandable">
-                    <li>
-                      <div class="collapsible-header" id="link-collapsible"><i class="material-icons tiny">link</i>Public Drive Share Link</div>
-                      <div class="collapsible-body">
-                        <div id="gfycat">
-                          <img src="https://thumbs.gfycat.com/PerkyWateryFish-mobile.jpg" alt="gfycat-embed">
-                        </div>
+
+<head>
+  <!-- meta-tags -->
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Google Drive Direct Link Generator</title>
+  <!-- Import Google Icon Font -->
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+  <!-- Import materialize.css-->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/materialize/0.98.2/css/materialize.min.css">
+  <link rel="stylesheet" href="../css/direct-drive-generator.css">
+</head>
+
+<body>
+  <div class="container" id="main" style="margin-top: 80.5px;">
+    <div class="row">
+      <div class="col l6 offset-l3 m8 offset-m2 s12">
+        <div class="card">
+          <div class="teal card-content white-text">
+            <span class="card-title">Google Drive Direct Link Generator</span>
+          </div>
+          <div class="card-content">
+            <div id="link-card">
+              <div>
+                <ul class="collapsible" data-collapsible="expandable">
+                  <li>
+                    <div class="collapsible-header" id="link-collapsible"><i class="material-icons tiny">link</i>Public
+                      Drive Share Link</div>
+                    <div class="collapsible-body">
+                      <div id="gfycat">
+                        <img src="https://thumbs.gfycat.com/PerkyWateryFish-mobile.jpg" alt="gfycat-embed">
                       </div>
-                    </li>
-                  </ul>
-                  <div class="input-field">
-                    <input id="link" type="text" class="validate" autocomplete="off">
-                    <label for="link">Link: e.g. https://drive.google.com/open?id=1K3VYuV6JJy3uErgN96tg4X0qFBiVDI35</label>
-                  </div>
+                    </div>
+                  </li>
+                </ul>
+                <div class="input-field">
+                  <input id="link" type="text" class="validate" autocomplete="off">
+                  <label for="link">Link: e.g. https://drive.google.com/open?id=1K3VYuV6JJy3uErgN96tg4X0qFBiVDI35</label>
                 </div>
-                <blockquote class="blue-grey lighten-5" style="font-size: 100%;">Direct Link: <a id="direct-link" class="red-text text-lighten-3" href="#" target="_blank">-/-</a></blockquote>
               </div>
+              <blockquote class="blue-grey lighten-5" style="font-size: 100%;">Direct Link: <a id="direct-link" class="red-text text-lighten-3"
+                  href="#" target="_blank">-/-</a></blockquote>
             </div>
           </div>
         </div>
       </div>
     </div>
-    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.1/jquery.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/0.98.2/js/materialize.min.js"></script>
-    <script type="text/javascript">
-    $(document).ready(function() {
+  </div>
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.1/jquery.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/0.98.2/js/materialize.min.js"></script>
+  <script type="text/javascript">
+    $(document).ready(function () {
       // Update margin functions
       function calcMargin() {
         var windowHeight = $(window).height();
@@ -62,7 +65,7 @@
       function updateMargin(margin) {
         $("#main").css("margin-top", margin);
       }
-      
+
       // Update margin function, but slower
       function slowUpdateMargin() {
         function forLoop(i) {
@@ -79,12 +82,12 @@
       updateMargin(calcMargin());
 
       // Update margin on window resize
-      $(window).resize(function() {
+      $(window).resize(function () {
         updateMargin(calcMargin());
       });
 
       // Update margin on different elements
-      $(".collapsible").click(function() {
+      $(".collapsible").click(function () {
         setTimeout(function () {
           updateMargin(calcMargin());
         }, 250);
@@ -102,13 +105,13 @@
       }
 
       // Input type trigger
-      $("#link").keyup(function() {updateLink();});
-      
+      $("#link").keyup(function () { updateLink(); });
+
       // direct link function
       function updateLink() {
         let edpi = $("#direct-link"),
-            link = $("#link").val(),
-            driveID = getDriveID(link);
+          link = $("#link").val(),
+          driveID = getDriveID(link);
         if (driveID) {
           let directLink = "https://drive.google.com/uc?export=download&id=" + driveID;
           edpi.text(directLink);
@@ -121,7 +124,7 @@
       }
 
       // Only load gfycat iframe if needed
-      $("#link-collapsible").click(function() {
+      $("#link-collapsible").click(function () {
         if ($("#gfycat").html().trim().startsWith('<img')) {
           $("#gfycat").html('<iframe src="https://gfycat.com/ifr/PerkyWateryFish" frameborder="0" scrolling="no" allowfullscreen width="550" height="308"></iframe>');
         } else {
@@ -129,6 +132,7 @@
         }
       });
     });
-    </script>
-  </body>
+  </script>
+</body>
+
 </html>
