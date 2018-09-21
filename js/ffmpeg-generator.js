@@ -199,7 +199,7 @@ document.addEventListener("DOMContentLoaded", () => {
     let file = document.querySelector("#fileInput").value.split(/(\\|\/)/g).pop().split(".");
     const fileExt = file.pop();
     const fileName = file.join(".");
-    const command = `ffmpeg -i "${fileName}.${fileExt}" -ss ${startTime.value} -t ${endTime.value - startTime.value} -vf ${args} "${fileName}_converted.${fileExt}"`;
+    const command = `ffmpeg -i "${fileName}.${fileExt}" -ss ${startTime.value} -t ${endTime.value - startTime.value} ${args} "${fileName}_converted.${fileExt}"`;
     output.innerHTML = command;
   });
 
