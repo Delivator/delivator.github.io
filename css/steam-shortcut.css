@@ -1,0 +1,52 @@
+body {
+  background-color: #111;
+}
+
+img.icon {
+  height: 100px;
+  width: 100px;
+}
+
+span {
+  align-self: center;
+  text-align: center;
+  font-family: Arial;
+  font-size: 150%;
+  color: rgb(235, 235, 235);
+}
+
+p {
+  text-align: center;
+  font-family: Arial;
+  font-size: 150%;
+  color: rgb(235, 235, 235);
+}
+
+.container {
+  display: grid;
+  grid-template-columns: auto 100px 100px 100px 100px 100px auto;
+  grid-template-rows: auto 50px 100px auto;
+  grid-column-gap: 15px;
+  height: 100vh;
+}
+
+.container-server {
+  display: grid;
+  grid-template-columns: 10% auto 10%;
+  height: 100vh;
+  margin-top: 25px;
+}
+
+.item {
+  grid-column: 2;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.ip {
+  font-size: 120%;
+}
+
+.ip a {
+  color: rgb(235, 235, 235);
+}
