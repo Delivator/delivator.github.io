@@ -10,10 +10,20 @@
 </head>
 
 <body>
-  <div id="modal-output" class="modal">
+  <div id="modal" class="modal">
     <div>
-      <p>Output:</p>
-      <pre id="output"></pre>
+      <img src=" ../img/close.svg" alt="close" id="close">
+      <div id="modal-output">
+        <p>Output:</p>
+        <pre id="output"></pre>
+      </div>
+      <div id="modal-settings" class="hidden">
+        <p>Settings:</p>
+        <label for="commandPreset">Command:</label>
+        <br>
+        <textarea id="commandPreset"></textarea>
+        <input type="button" class="reset" value="Reset" id="resetSettings">
+      </div>
     </div>
   </div>
   <div class="container" id="main">
@@ -60,6 +70,7 @@
       </div>
       <div>
         <input type="button" value="Generate Command" id="generate">
+        <input type="button" value="Settings" id="settings">
       </div>
     </div>
   </div>

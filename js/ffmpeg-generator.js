@@ -1,12 +1,14 @@
-let args = '-c:v copy';
-
-function setCookie(cname, cvalue, exdays) {
-  let d = new Date();
-  d.setTime(d.getTime() + (exdays*24*60*60*1000));
-  let expires = "expires=" + d.toUTCString();
-  document.cookie = `${cname}=${cvalue};${expires};path=/`;
+const defaultSettings = {
+  version: 1,
+  volume: 0.5,
+  commandPreset: 'ffmpeg -i "{{fileName}}.{{fileExtention}}" -ss {{startTime}} -t {{duration}} -c:v copy -c:a copy "{{fileName}}_trimmed.{{fileExtention}}"'
 }
 
+let settings = localStorage.getItem("settings");
+
+function qs(querySelector) {
+  return document.querySelector(querySelector);
+}
 function convertTime(time) {
   time = Math.floor(time);
   let h = Math.floor(time / 60 / 60);
@@ -14,54 +16,67 @@ function convertTime(time) {
   let s = time - (h * 60 * 60) - (m * 60);
   if (s < 10) s = "0" + s;
   if (h > 0) {
-    return(`${h}:${m}:${s}`);
+    return (`${h}:${m}:${s}`);
   } else {
-    return(`${m}:${s}`);
+    return (`${m}:${s}`);
   }
 }
 
-function getCookie(cname) {
-  let name = cname + "=",
-      decodedCookie = decodeURIComponent(document.cookie),
-      ca = decodedCookie.split(";");
-  for (let i = 0; i < ca.length; i++) {
-    let c = ca[i];
-    while (c.charAt(0) == " ") {
-      c = c.substring(1);
-    }
-    if (c.indexOf(name) == 0) {
-      return c.substring(name.length, c.length)
-    }
+function saveSettings() {
+  localStorage.setItem("settings", JSON.stringify(settings));
+}
+
+function selectText(node) {
+  if (document.body.createTextRange) {
+      const range = document.body.createTextRange();
+      range.moveToElementText(node);
+      range.select();
+  } else if (window.getSelection) {
+      const selection = window.getSelection();
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      selection.removeAllRanges();
+      selection.addRange(range);
   }
-  return "";
 }
 
 document.addEventListener("DOMContentLoaded", () => {
-  let url = window.URL || window.webkitURL,
-      inputNode = document.querySelector("#fileInput"),
-      videoPlayer = document.querySelector("#videoPlayer"),
-      progressBar = document.querySelector("#progressBar"),
-      pauseButton = document.querySelector("#playPause"),
-      playerTime = document.querySelector("#playerTime"),
-      muteButton = document.querySelector("#mute"),
-      volumeSlider = document.querySelector("#volume"),
-      startTime = document.querySelector("#startTime"),
-      endTime = document.querySelector("#endTime"),
-      startTimeBtn = document.querySelector("#startTime-btn"),
-      endTimeBtn = document.querySelector("#endTime-btn"),
-      markerStart = document.querySelector("#marker-start"),
-      markerEnd = document.querySelector("#marker-end"),
-      generateBtn = document.querySelector("#generate"),
-      mainDiv = document.querySelector("#main"),
-      modalOutput = document.querySelector("#modal-output"),
-      output = document.querySelector("#output"),
-      durationMultiplier,
-      autoResume = false;
+  const inputNode = qs("#fileInput"),
+    videoPlayer = qs("#videoPlayer"),
+    progressBar = qs("#progressBar"),
+    pauseButton = qs("#playPause"),
+    playerTime = qs("#playerTime"),
+    muteButton = qs("#mute"),
+    volumeSlider = qs("#volume"),
+    startTime = qs("#startTime"),
+    endTime = qs("#endTime"),
+    mainDiv = qs("#main"),
+    modal = qs("#modal"),
+    modalOutput = qs("#modal-output"),
+    settingsModal = qs("#modal-settings"),
+    commandPreset = qs("#commandPreset"),
+    output = qs("#output");
 
-  function playSelectedFile(event) {
+  let durationMultiplier,
+    autoResume = false,
+    preventEvent = false;
+
+  if (!settings) {
+    settings = defaultSettings;
+    saveSettings();
+  } else {
+    settings = JSON.parse(localStorage.getItem("settings"));
+  }
+
+  videoPlayer.volume = settings.volume;
+  volumeSlider.value = Math.floor(settings.volume * 100);
+  commandPreset.value = settings.commandPreset;
+  commandPreset.placeholder = settings.commandPreset;
+
+  function playSelectedFile() {
     let file = this.files[0],
-        type = file.type,
-        canPlay = videoPlayer.canPlayType(type);
+      type = file.type,
+      canPlay = videoPlayer.canPlayType(type);
     if (canPlay === "") canPlay = "no";
     if (canPlay === "no") {
       return;
@@ -70,21 +85,15 @@ document.addEventListener("DOMContentLoaded", () => {
     videoPlayer.src = fileUrl;
   }
 
-  if (getCookie("volume") === "") {
-    videoPlayer.volume = 0.5;
-    volumeSlider.value = 50;
-  } else {
-    videoPlayer.volume = getCookie("volume");
-    volumeSlider.value = Math.floor(getCookie("volume") * 100);
-  }
-  
   videoPlayer.onvolumechange = () => {
     if (videoPlayer.muted || videoPlayer.volume === 0) {
       muteButton.className = "muted";
     } else {
       muteButton.className = "volume";
     }
-    setCookie("volume", videoPlayer.volume, 356);
+    volumeSlider.value = Math.floor(videoPlayer.volume * 100);
+    preventEvent = true;
+    settings.volume = videoPlayer.volume;
   };
 
   videoPlayer.oncanplay = () => {
@@ -113,23 +122,23 @@ document.addEventListener("DOMContentLoaded", () => {
   videoPlayer.ontimeupdate = () => {
     progressBar.value = Math.floor(videoPlayer.currentTime * durationMultiplier);
     playerTime.innerHTML = `${convertTime(videoPlayer.currentTime)}/${convertTime(videoPlayer.duration)}`;
-    if (videoPlayer.currentTime > endTime.value) videoPlayer.currentTime = startTime.value;
-    if (videoPlayer.currentTime < startTime.value) videoPlayer.currentTime = startTime.value;
+    if (!videoPlayer.paused && videoPlayer.currentTime > endTime.value) videoPlayer.currentTime = startTime.value;
+    if (!videoPlayer.paused && videoPlayer.currentTime < startTime.value) videoPlayer.currentTime = startTime.value;
   };
 
   inputNode.addEventListener("change", playSelectedFile, false);
-  
-  progressBar.addEventListener("input", event => {
+
+  progressBar.addEventListener("input", () => {
     videoPlayer.currentTime = progressBar.value / durationMultiplier;
   });
 
-  progressBar.addEventListener("mousedown", event => {
+  progressBar.addEventListener("mousedown", () => {
     if (!videoPlayer.paused) autoResume = true;
     videoPlayer.pause();
     videoPlayer.paused ? pauseButton.className = "play" : pauseButton.className = "pause";
   });
 
-  progressBar.addEventListener("mouseup", event => {
+  progressBar.addEventListener("mouseup", () => {
     if (autoResume) {
       autoResume = false;
       videoPlayer.play();
@@ -137,7 +146,7 @@ document.addEventListener("DOMContentLoaded", () => {
     videoPlayer.paused ? pauseButton.className = "play" : pauseButton.className = "pause";
   });
 
-  pauseButton.addEventListener("click", event => {
+  pauseButton.addEventListener("click", () => {
     if (videoPlayer.readyState < 4) return;
     if (videoPlayer.paused) {
       videoPlayer.play();
@@ -148,11 +157,15 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  muteButton.addEventListener("click", event => {
+  muteButton.addEventListener("click", () => {
     videoPlayer.muted = !videoPlayer.muted;
   });
 
   volumeSlider.addEventListener("input", event => {
+    if (preventEvent) {
+      preventEvent = false;
+      return;
+    }
     videoPlayer.volume = volumeSlider.value / 100;
   });
 
@@ -163,7 +176,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (parseFloat(startTime.value) > parseFloat(endTime.value)) endTime.value = startTime.value;
     endTime.min = startTime.value;
     let procent = startTime.value / videoPlayer.duration * 100;
-    markerStart.style.left = `calc(${procent}% - 12px)`;
+    qs("#marker-start").style.left = `calc(${procent}% - 12px)`;
   }
 
   startTime.addEventListener("input", startTimeEvent);
@@ -176,36 +189,107 @@ document.addEventListener("DOMContentLoaded", () => {
     videoPlayer.currentTime = endTime.value;
     if (parseFloat(startTime.value) > parseFloat(endTime.value)) endTime.value = startTime.value;
     let procent = endTime.value / videoPlayer.duration * 100;
-    markerEnd.style.left = `calc(${procent}% - 12px)`;
+    qs("#marker-end").style.left = `calc(${procent}% - 12px)`;
   }
 
   endTime.addEventListener("input", endTimeEvent);
   endTime.addEventListener("change", endTimeEvent);
   endTime.addEventListener("keyup", endTimeEvent);
 
-  startTimeBtn.addEventListener("click", event => {
+  qs("#startTime-btn").addEventListener("click", () => {
     startTime.value = videoPlayer.currentTime;
     startTimeEvent();
   });
 
-  endTimeBtn.addEventListener("click", event => {
+  qs("#endTime-btn").addEventListener("click", () => {
     endTime.value = videoPlayer.currentTime;
     endTimeEvent();
   });
 
-  generateBtn.addEventListener("click", event => {
+  qs("#generate").addEventListener("click", () => {
+    modalOutput.className = "";
+    settingsModal.className = "hidden";
     mainDiv.classList.toggle("blurred");
-    modalOutput.classList.toggle("modal-toggled");
-    let file = document.querySelector("#fileInput").value.split(/(\\|\/)/g).pop().split(".");
+    modal.classList.toggle("modal-toggled");
+    let file = inputNode.value.split(/(\\|\/)/g).pop().split(".");
     const fileExt = file.pop();
     const fileName = file.join(".");
-    const command = `ffmpeg -i "${fileName}.${fileExt}" -ss ${startTime.value} -t ${endTime.value - startTime.value} ${args} "${fileName}_converted.${fileExt}"`;
+    const command = settings.commandPreset
+      .replace(/{{fileName}}/g, fileName)
+      .replace(/{{fileExtention}}/g, fileExt)
+      .replace(/{{startTime}}/g, startTime.value)
+      .replace(/{{duration}}/g, endTime.value - startTime.value);
     output.innerHTML = command;
   });
 
-  modalOutput.addEventListener("click", event => {
-    if (event.target !== modalOutput) return;
+  modal.addEventListener("click", event => {
+    if (event.target !== modal) return;
     mainDiv.classList.toggle("blurred");
-    modalOutput.classList.toggle("modal-toggled");
+    modal.classList.toggle("modal-toggled");
+  });
+
+  qs("#close").addEventListener("click", () => {
+    mainDiv.classList.toggle("blurred");
+    modal.classList.toggle("modal-toggled");
+  });
+
+  qs("#settings").addEventListener("click", () => {
+    modalOutput.className = "hidden";
+    settingsModal.className = "";
+    mainDiv.classList.toggle("blurred");
+    modal.classList.toggle("modal-toggled");
+  });
+
+  document.addEventListener("keypress", (event) => {
+    if (event.keyCode === 32) { // space
+      if (videoPlayer.paused) {
+        videoPlayer.play();
+        videoPlayer.paused ? pauseButton.className = "play" : pauseButton.className = "pause";
+      } else {
+        videoPlayer.pause();
+        videoPlayer.paused ? pauseButton.className = "play" : pauseButton.className = "pause";
+      }
+    }
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.keyCode === 37) { // left
+      if (!videoPlayer.paused) videoPlayer.pause();
+      videoPlayer.currentTime -= 0.01;
+    }
+    if (event.keyCode === 39) { // right
+      if (!videoPlayer.paused) videoPlayer.pause();
+      videoPlayer.currentTime += 0.01;
+    }
+    if (event.keyCode === 38) { // up
+      if (videoPlayer.volume + 0.01 > 1) {
+        videoPlayer.volume = 1;
+      } else {
+        videoPlayer.volume += 0.01;
+      }
+    }
+    if (event.keyCode === 40) { // down
+      if (videoPlayer.volume - 0.01 < 0) {
+        videoPlayer.volume = 0;
+      } else {
+        videoPlayer.volume -= 0.01;
+      }
+    }
+  });
+
+  window.addEventListener("beforeunload", () => {
+    saveSettings();
+  });
+
+  commandPreset.addEventListener("input", () => {
+    settings.commandPreset = commandPreset.value;
+  })
+
+  qs("#resetSettings").addEventListener("click", () => {
+    commandPreset.value = defaultSettings.commandPreset;
+  });
+
+  output.addEventListener("click", () => {
+    selectText(output);
   });
 });
