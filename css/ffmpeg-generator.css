@@ -84,6 +84,7 @@ input[type="range"]:hover {
   background-size: 80%;
   background-position: center;
   background-repeat: no-repeat;
+  padding: 0px !important;
 }
 
 .playerControls input[type="button"]:hover {
