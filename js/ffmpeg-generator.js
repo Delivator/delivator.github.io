@@ -4,7 +4,7 @@ const defaultSettings = {
   commandPreset: 'ffmpeg -i "{{fileName}}.{{fileExtention}}" -ss {{startTime}} -t {{duration}} -c:v copy -c:a copy "{{fileName}}_trimmed.{{fileExtention}}"'
 }
 
-let settings = localStorage.getItem("settings");
+let settings = localStorage.getItem("ffmpeg-generator-settings");
 
 function qs(querySelector) {
   return document.querySelector(querySelector);
@@ -23,7 +23,7 @@ function convertTime(time) {
 }
 
 function saveSettings() {
-  localStorage.setItem("settings", JSON.stringify(settings));
+  localStorage.setItem("ffmpeg-generator-settings", JSON.stringify(settings));
 }
 
 function selectText(node) {
@@ -65,7 +65,7 @@ document.addEventListener("DOMContentLoaded", () => {
     settings = defaultSettings;
     saveSettings();
   } else {
-    settings = JSON.parse(localStorage.getItem("settings"));
+    settings = JSON.parse(localStorage.getItem("ffmpeg-generator-settings"));
   }
 
   videoPlayer.volume = settings.volume;
