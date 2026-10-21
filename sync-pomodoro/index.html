@@ -1,0 +1,1339 @@
+<!DOCTYPE html>
+<html lang="de" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SyncPomodoro – Gemeinsam fokussieren</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        focus: {
+                            500: '#f43f5e',
+                            600: '#e11d48',
+                        },
+                        shortBreak: {
+                            500: '#10b981',
+                            600: '#059669',
+                        },
+                        longBreak: {
+                            500: '#3b82f6',
+                            600: '#2563eb',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            background-color: #0f172a;
+            color: #f8fafc;
+            overflow-x: hidden;
+        }
+        /* Smooth ring transition */
+        .progress-ring__circle {
+            transition: stroke-dashoffset 0.35s ease-out, stroke 0.5s ease;
+            transform: rotate(-90deg);
+            transform-origin: 50% 50%;
+        }
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(30, 41, 59, 0.5);
+            border-radius: 8px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(71, 85, 105, 0.8);
+            border-radius: 8px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(100, 116, 139, 1);
+        }
+        @keyframes pulse-subtle {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+        .animate-pulse-subtle {
+            animation: pulse-subtle 2.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        @keyframes whip-shake {
+            0%, 100% { transform: translate(0, 0) rotate(0deg); }
+            15% { transform: translate(-8px, -5px) rotate(-1.5deg); }
+            30% { transform: translate(8px, 4px) rotate(1.5deg); }
+            45% { transform: translate(-6px, 5px) rotate(-1deg); }
+            60% { transform: translate(6px, -4px) rotate(1deg); }
+            75% { transform: translate(-3px, 2px) rotate(-0.5deg); }
+        }
+        .animate-whip-shake {
+            animation: whip-shake 0.45s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between antialiased selection:bg-rose-500 selection:text-white">
+
+    <!-- Background Glow Effect -->
+    <div id="bg-glow" class="fixed inset-0 pointer-events-none transition-colors duration-1000 opacity-20 bg-gradient-to-br from-rose-600/40 via-slate-900 to-slate-950 z-0"></div>
+
+    <!-- Whip Flash Overlay -->
+    <div id="whip-flash" class="fixed inset-0 pointer-events-none z-40 bg-rose-500/25 opacity-0 transition-opacity duration-200"></div>
+
+    <!-- Notification Toast -->
+    <div id="toast" class="fixed top-5 left-1/2 -translate-x-1/2 z-50 transform -translate-y-24 opacity-0 transition-all duration-300 bg-slate-800/95 border border-slate-700 text-white px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-3 pointer-events-none">
+        <i id="toast-icon" class="ph-fill ph-check-circle text-emerald-400 text-xl"></i>
+        <span id="toast-msg" class="text-sm font-medium">Nachricht</span>
+    </div>
+
+    <!-- Header -->
+    <header class="relative z-10 w-full max-w-6xl mx-auto px-4 pt-5 pb-3 flex flex-wrap items-center justify-between gap-4 border-b border-slate-800/80">
+        <div class="flex items-center gap-3">
+            <div id="brand-icon" class="w-10 h-10 rounded-xl bg-rose-500/20 border border-rose-500/40 flex items-center justify-center text-rose-400 shadow-lg shadow-rose-500/10 transition-colors duration-500">
+                <i class="ph-fill ph-timer text-2xl"></i>
+            </div>
+            <div>
+                <h1 class="font-bold text-lg tracking-tight flex items-center gap-2">
+                    SyncPomodoro
+                    <span class="text-xs font-mono uppercase px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">Live Sync</span>
+                </h1>
+                <p class="text-xs text-slate-400">Kein Server nötig • Echtzeit-Raum</p>
+            </div>
+        </div>
+
+        <!-- Room Bar -->
+        <div class="flex items-center gap-2 sm:gap-3 bg-slate-900/90 border border-slate-800 p-1.5 rounded-2xl shadow-inner">
+            <div class="flex items-center gap-2 px-3 py-1.5 bg-slate-800/70 rounded-xl">
+                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping" id="sync-ping"></span>
+                <span class="w-2 h-2 rounded-full bg-emerald-400 -ml-4" id="sync-dot"></span>
+                <span class="text-xs text-slate-400 font-medium">Raum:</span>
+                <span id="current-room-display" class="font-mono font-bold text-sm text-white tracking-wider">LADE...</span>
+            </div>
+
+            <button id="btn-share" class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white font-medium text-xs transition shadow-lg shadow-indigo-600/20" title="Einladungslink oder Code kopieren">
+                <i class="ph-bold ph-share-network text-sm"></i>
+                <span>Freund einladen</span>
+            </button>
+
+            <button id="btn-change-room" class="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition text-xs flex items-center gap-1" title="Anderem Raum beitreten">
+                <i class="ph-bold ph-arrows-left-right text-sm"></i>
+                <span class="hidden sm:inline">Raum wechseln</span>
+            </button>
+
+            <button id="btn-sound-toggle" class="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition" title="Ton an/aus">
+                <i id="sound-icon" class="ph-bold ph-speaker-high text-base text-emerald-400"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="relative z-10 flex-1 w-full max-w-6xl mx-auto px-4 py-6 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        
+        <!-- Left / Center Column: The Synchronized Timer (7 cols on desktop) -->
+        <div class="lg:col-span-7 flex flex-col items-center bg-slate-900/70 backdrop-blur-xl border border-slate-800/90 rounded-3xl p-6 sm:p-8 shadow-2xl relative overflow-hidden">
+            
+            <!-- Mode Selector Tabs -->
+            <div class="grid grid-cols-3 gap-2 p-1.5 bg-slate-950/80 rounded-2xl border border-slate-800/80 w-full max-w-md mb-8">
+                <button data-mode="pomodoro" class="mode-btn py-2.5 px-3 rounded-xl text-xs sm:text-sm font-semibold transition-all flex items-center justify-center gap-1.5 bg-rose-600 text-white shadow-lg">
+                    <i class="ph-fill ph-brain"></i>
+                    <span>Fokus (25m)</span>
+                </button>
+                <button data-mode="shortBreak" class="mode-btn py-2.5 px-3 rounded-xl text-xs sm:text-sm font-semibold transition-all flex items-center justify-center gap-1.5 text-slate-400 hover:text-white">
+                    <i class="ph-fill ph-coffee"></i>
+                    <span>Pause (5m)</span>
+                </button>
+                <button data-mode="longBreak" class="mode-btn py-2.5 px-3 rounded-xl text-xs sm:text-sm font-semibold transition-all flex items-center justify-center gap-1.5 text-slate-400 hover:text-white">
+                    <i class="ph-fill ph-battery-charging"></i>
+                    <span>Lang (15m)</span>
+                </button>
+            </div>
+
+            <!-- SVG Circular Timer Display -->
+            <div class="relative w-64 h-64 sm:w-80 sm:h-80 flex items-center justify-center my-2">
+                <svg class="w-full h-full" viewBox="0 0 260 260">
+                    <!-- Background Track -->
+                    <circle
+                        cx="130" cy="130" r="116"
+                        fill="transparent"
+                        stroke="rgba(51, 65, 85, 0.35)"
+                        stroke-width="10"
+                    />
+                    <!-- Animated Progress Ring -->
+                    <circle
+                        id="timer-ring"
+                        class="progress-ring__circle"
+                        cx="130" cy="130" r="116"
+                        fill="transparent"
+                        stroke="#f43f5e"
+                        stroke-width="10"
+                        stroke-linecap="round"
+                        stroke-dasharray="728.85"
+                        stroke-dashoffset="0"
+                    />
+                </svg>
+
+                <!-- Center Digital Readout -->
+                <div class="absolute inset-0 flex flex-col items-center justify-center text-center select-none">
+                    <span id="phase-badge" class="text-xs font-bold uppercase tracking-widest px-3 py-1 rounded-full bg-rose-500/15 text-rose-400 border border-rose-500/30 mb-2">
+                        Fokus-Phase
+                    </span>
+                    <div id="time-display" class="font-mono text-6xl sm:text-7xl font-bold tracking-tight text-white tabular-nums">
+                        25:00
+                    </div>
+                    <p id="sync-action-log" class="text-xs text-slate-400 mt-3 max-w-[200px] truncate">
+                        Bereit zum gemeinsamen Start
+                    </p>
+                </div>
+            </div>
+
+            <!-- Main Synchronized Action Controls -->
+            <div class="flex items-center gap-4 mt-6 w-full max-w-sm justify-center">
+                <button id="btn-reset" class="p-4 rounded-2xl bg-slate-800/90 hover:bg-slate-700 text-slate-300 hover:text-white active:scale-95 transition border border-slate-700/70" title="Timer für beide zurücksetzen">
+                    <i class="ph-bold ph-arrow-counter-clockwise text-xl"></i>
+                </button>
+
+                <button id="btn-start-pause" class="flex-1 py-4 px-8 rounded-2xl bg-rose-600 hover:bg-rose-500 active:scale-95 text-white font-bold text-lg tracking-wide shadow-xl shadow-rose-600/25 transition-all flex items-center justify-center gap-3">
+                    <i id="play-pause-icon" class="ph-fill ph-play text-2xl"></i>
+                    <span id="play-pause-text">Für beide starten</span>
+                </button>
+
+                <button id="btn-skip" class="p-4 rounded-2xl bg-slate-800/90 hover:bg-slate-700 text-slate-300 hover:text-white active:scale-95 transition border border-slate-700/70" title="Nächste Phase überspringen">
+                    <i class="ph-bold ph-skip-forward text-xl"></i>
+                </button>
+            </div>
+
+            <!-- Custom Duration Adjuster & Completed Sessions -->
+            <div class="w-full mt-8 pt-6 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-4 text-xs text-slate-400">
+                <div class="flex items-center gap-2">
+                    <span>Abgeschlossene Pomodoros im Raum:</span>
+                    <span id="completed-count" class="px-2.5 py-1 rounded-lg bg-slate-800 text-white font-mono font-bold">0</span>
+                </div>
+                <button id="btn-custom-times" class="text-slate-300 hover:text-white underline decoration-slate-600 underline-offset-4 flex items-center gap-1">
+                    <i class="ph ph-sliders"></i>
+                    <span>Zeiten anpassen</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Right Column: Friends in Room, Shared Tasks & Quick Chat (5 cols on desktop) -->
+        <div class="lg:col-span-5 flex flex-col gap-6">
+            
+            <!-- Card 1: Dein Profil & Wer ist im Raum -->
+            <div class="bg-slate-900/70 backdrop-blur-xl border border-slate-800/90 rounded-3xl p-5 shadow-xl">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-sm font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+                        <i class="ph-fill ph-users-three text-indigo-400 text-lg"></i>
+                        <span>Team im Raum (<span id="participant-count">1</span>)</span>
+                    </h2>
+                    <div class="flex items-center gap-1.5">
+                        <input id="input-username" type="text" maxlength="20" placeholder="Dein Name..." class="bg-slate-950 border border-slate-800 rounded-xl px-3 py-1 text-xs text-white focus:outline-none focus:border-indigo-500 w-32 sm:w-36" />
+                    </div>
+                </div>
+
+                <!-- Active Participants List -->
+                <div id="participants-list" class="flex flex-wrap gap-2">
+                    <!-- Dynamically populated -->
+                </div>
+            </div>
+
+            <!-- Card 2: Gemeinsame Fokus-Aufgaben & Live-Puls -->
+            <div class="bg-slate-900/70 backdrop-blur-xl border border-slate-800/90 rounded-3xl p-5 shadow-xl flex flex-col h-[390px]">
+                <!-- Mini Switcher between Tasks & Chat -->
+                <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-3 mb-3">
+                    <div class="flex gap-1.5">
+                        <button id="tab-tasks" class="px-3 py-1.5 rounded-xl bg-slate-800 text-white text-xs font-semibold flex items-center gap-1.5 transition">
+                            <i class="ph-fill ph-check-square-offset text-emerald-400"></i>
+                            <span>Tasks</span>
+                            <span id="tasks-badge" class="px-1.5 py-0.2 bg-slate-700 rounded-full text-[10px]">0</span>
+                        </button>
+                        <button id="tab-chat" class="px-3 py-1.5 rounded-xl text-slate-400 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition">
+                            <i class="ph-fill ph-chat-circle-dots text-indigo-400"></i>
+                            <span>Chat</span>
+                        </button>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                        <button id="btn-nudge" class="px-2.5 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 text-xs font-medium flex items-center gap-1 active:scale-95 transition" title="Schicke deinem Freund ein kurzes akustisches High-Five">
+                            <span>👋 High-Five</span>
+                        </button>
+                        <button id="btn-whip" class="px-2.5 py-1.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/40 text-rose-300 text-xs font-semibold flex items-center gap-1 active:scale-95 transition shadow-sm shadow-rose-500/10" title="Motivations-Peitsche knallen lassen: An die Arbeit!">
+                            <span>💥 Peitsche!</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Tasks View -->
+                <div id="view-tasks" class="flex-1 flex flex-col overflow-hidden">
+                    <div id="tasks-container" class="flex-1 overflow-y-auto space-y-2 pr-1">
+                        <p class="text-xs text-slate-500 text-center my-8">Fügt hinzu, woran ihr in dieser Session arbeitet!</p>
+                    </div>
+                    <form id="form-task" class="mt-3 flex gap-2">
+                        <input id="input-task" type="text" maxlength="80" placeholder="Neues Ziel für diese Session..." class="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500" />
+                        <button type="submit" class="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-semibold transition flex items-center gap-1">
+                            <i class="ph-bold ph-plus"></i>
+                            <span>Hinzufügen</span>
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Chat View (Hidden by default) -->
+                <div id="view-chat" class="hidden flex-1 flex flex-col overflow-hidden">
+                    <div id="chat-container" class="flex-1 overflow-y-auto space-y-2 pr-1">
+                        <p class="text-xs text-slate-500 text-center my-8">Schreibt euch kurz vor der nächsten Fokus-Phase!</p>
+                    </div>
+                    <form id="form-chat" class="mt-3 flex gap-2">
+                        <input id="input-chat" type="text" maxlength="140" placeholder="Nachricht an den Raum senden..." class="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-indigo-500" />
+                        <button type="submit" class="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold transition">
+                            <i class="ph-bold ph-paper-plane-right"></i>
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <!-- Modal: Share / Invite Friend -->
+    <div id="modal-share" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm hidden items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-800 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-5">
+            <div class="flex items-center justify-between">
+                <h3 class="text-lg font-bold text-white flex items-center gap-2">
+                    <i class="ph-fill ph-users text-indigo-400"></i>
+                    <span>Mit Freund synchronisieren</span>
+                </h3>
+                <button id="close-share-modal" class="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800">
+                    <i class="ph-bold ph-x text-lg"></i>
+                </button>
+            </div>
+
+            <p class="text-xs text-slate-300 leading-relaxed">
+                Schicke deinem Freund diesen Link oder den <strong>Raum-Code</strong>. Sobald ihr im selben Raum seid, läuft der Timer für euch beide exakt synchron.
+            </p>
+
+            <!-- Option 1: Direct Invite Link -->
+            <div class="space-y-1.5">
+                <label class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">1. Direkt-Einladungslink</label>
+                <div class="flex gap-2">
+                    <input id="share-url-input" type="text" readonly class="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs font-mono text-slate-300 select-all focus:outline-none" />
+                    <button id="btn-copy-url" class="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold transition flex items-center gap-1.5 shrink-0">
+                        <i class="ph-bold ph-copy"></i>
+                        <span>Link kopieren</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Option 2: Room Code -->
+            <div class="space-y-1.5">
+                <label class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">2. Oder per Raum-Code beitreten</label>
+                <div class="flex items-center justify-between bg-slate-950 border border-slate-800 rounded-xl p-3">
+                    <span id="share-code-display" class="font-mono text-xl font-bold tracking-widest text-indigo-400">SYNC-000</span>
+                    <button id="btn-copy-code" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-medium transition flex items-center gap-1">
+                        <i class="ph-bold ph-copy"></i>
+                        <span>Code kopieren</span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="pt-2 border-t border-slate-800 flex justify-end">
+                <button id="btn-done-share" class="px-5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-white">Fertig</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Change / Join Room -->
+    <div id="modal-room" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm hidden items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-800 rounded-3xl max-w-sm w-full p-6 shadow-2xl space-y-4">
+            <div class="flex items-center justify-between">
+                <h3 class="text-base font-bold text-white">Raum wechseln oder beitreten</h3>
+                <button id="close-room-modal" class="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800">
+                    <i class="ph-bold ph-x"></i>
+                </button>
+            </div>
+            <p class="text-xs text-slate-400">Gib den Raum-Code deines Freundes ein oder denk dir einen eigenen Raumnamen aus (z.B. <span class="font-mono text-slate-300">KLAUSUR-2026</span>):</p>
+            <form id="form-join-room" class="space-y-3">
+                <input id="input-room-code" type="text" maxlength="24" placeholder="z.B. FOCUS-482" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm font-mono uppercase text-white focus:outline-none focus:border-indigo-500" required />
+                <div class="flex gap-2 justify-end">
+                    <button type="button" id="btn-random-room" class="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs text-slate-300">Neuer Zufallsraum</button>
+                    <button type="submit" class="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white">Raum betreten</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Custom Timer Duration -->
+    <div id="modal-settings" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm hidden items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-800 rounded-3xl max-w-sm w-full p-6 shadow-2xl space-y-4">
+            <div class="flex items-center justify-between">
+                <h3 class="text-base font-bold text-white">Timer-Dauer für den Raum</h3>
+                <button id="close-settings-modal" class="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800">
+                    <i class="ph-bold ph-x"></i>
+                </button>
+            </div>
+            <form id="form-settings" class="space-y-3">
+                <div class="grid grid-cols-3 gap-3">
+                    <div>
+                        <label class="text-[11px] text-slate-400 block mb-1">Fokus (Min)</label>
+                        <input id="set-pomodoro" type="number" min="1" max="120" value="25" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm font-mono text-white" />
+                    </div>
+                    <div>
+                        <label class="text-[11px] text-slate-400 block mb-1">Pause (Min)</label>
+                        <input id="set-short" type="number" min="1" max="60" value="5" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm font-mono text-white" />
+                    </div>
+                    <div>
+                        <label class="text-[11px] text-slate-400 block mb-1">Lang (Min)</label>
+                        <input id="set-long" type="number" min="1" max="90" value="15" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm font-mono text-white" />
+                    </div>
+                </div>
+                <div class="flex justify-end pt-2">
+                    <button type="submit" class="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-xs font-semibold text-white">Für beide speichern</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="relative z-10 w-full max-w-6xl mx-auto px-4 py-4 text-center text-xs text-slate-500 flex flex-col sm:flex-row items-center justify-between gap-2">
+        <span>Serverlose Echtzeit-Synchronisation über Cloud-State • Keine Installation nötig</span>
+        <span id="user-id-badge" class="font-mono text-[11px] text-slate-600">Session wird verbunden...</span>
+    </footer>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc, updateDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // --- 1. ENVIRONMENT & FIREBASE CONFIGURATION ---
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'sync-pomodoro-default';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+
+        let db = null;
+        let auth = null;
+        let currentUser = null;
+        let roomUnsubscribe = null;
+
+        // --- 2. APPLICATION STATE ---
+        const RING_CIRCUMFERENCE = 2 * Math.PI * 116; // r = 116 -> ~728.85
+        let soundEnabled = true;
+        let lastPlayedEventId = null;
+        let lastWhipTime = 0;
+
+        const WHIP_QUOTES = [
+            "Keine Müdigkeit vortäuschen – weiter geht's!",
+            "Handy weg, Fokus an!",
+            "Die Pause ist noch nicht vorbei... äh, doch, an die Arbeit!",
+            "Zack, zack! Die Aufgaben erledigen sich nicht von selbst!",
+            "Vollgas jetzt, später freuen!"
+        ];
+
+        // Default user profile
+        const randomNum = Math.floor(100 + Math.random() * 900);
+        let myName = `FokusBuddy-${randomNum}`;
+        let currentRoomId = getInitialRoomFromUrl();
+
+        // Synchronized Room State
+        let roomState = {
+            mode: 'pomodoro', // 'pomodoro' | 'shortBreak' | 'longBreak'
+            isRunning: false,
+            remainingSeconds: 25 * 60,
+            targetEndTime: null, // Epoch timestamp (ms) when running
+            durations: {
+                pomodoro: 25 * 60,
+                shortBreak: 5 * 60,
+                longBreak: 15 * 60
+            },
+            completedPomodoros: 0,
+            lastActionBy: 'System',
+            lastActionText: 'Raum bereit',
+            eventSignal: null, // { id, type: 'start'|'pause'|'complete'|'nudge', by }
+            participants: {},  // { [uid]: { name, lastSeen } }
+            tasks: [],         // [{ id, text, done, author }]
+            messages: []       // [{ id, sender, text, time }]
+        };
+
+        // --- 3. SOUND SYNTHESIS (TONE.JS - NO EXTERNAL MP3 NEEDED) ---
+        function playSynthesizedWhipCrack() {
+            try {
+                const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                const ctx = new AudioCtx();
+                const now = ctx.currentTime;
+
+                // 1. Short "whoosh" buildup before the crack
+                const whooshDur = 0.09;
+                const whooshBuf = ctx.createBuffer(1, ctx.sampleRate * whooshDur, ctx.sampleRate);
+                const whooshData = whooshBuf.getChannelData(0);
+                for (let i = 0; i < whooshData.length; i++) {
+                    whooshData[i] = (Math.random() * 2 - 1) * (i / whooshData.length) * 0.35;
+                }
+                const whooshSource = ctx.createBufferSource();
+                whooshSource.buffer = whooshBuf;
+                const whooshFilter = ctx.createBiquadFilter();
+                whooshFilter.type = 'bandpass';
+                whooshFilter.frequency.setValueAtTime(300, now);
+                whooshFilter.frequency.exponentialRampToValueAtTime(1400, now + whooshDur);
+                whooshSource.connect(whooshFilter);
+                whooshFilter.connect(ctx.destination);
+                whooshSource.start(now);
+
+                // 2. Sharp supersonic whip crack impulse (white noise burst + high-pass + fast decay)
+                const crackStart = now + whooshDur;
+                const crackDur = 0.18;
+                const crackBuf = ctx.createBuffer(1, ctx.sampleRate * crackDur, ctx.sampleRate);
+                const crackData = crackBuf.getChannelData(0);
+                for (let i = 0; i < crackData.length; i++) {
+                    const env = Math.pow(1 - i / crackData.length, 3.2);
+                    crackData[i] = (Math.random() * 2 - 1) * env;
+                }
+                const crackSource = ctx.createBufferSource();
+                crackSource.buffer = crackBuf;
+
+                const filter = ctx.createBiquadFilter();
+                filter.type = 'bandpass';
+                filter.frequency.setValueAtTime(2400, crackStart);
+                filter.Q.setValueAtTime(0.9, crackStart);
+
+                const gain = ctx.createGain();
+                gain.gain.setValueAtTime(1.2, crackStart);
+                gain.gain.exponentialRampToValueAtTime(0.01, crackStart + crackDur);
+
+                crackSource.connect(filter);
+                filter.connect(gain);
+                gain.connect(ctx.destination);
+                crackSource.start(crackStart);
+            } catch (err) {
+                // Ignore audio context errors
+            }
+        }
+
+        function playWhipSound() {
+            if (!soundEnabled) return;
+            try {
+                const whipAudio = new Audio('crack_the_whip.mp3');
+                whipAudio.volume = 0.9;
+                const playPromise = whipAudio.play();
+                if (playPromise !== undefined) {
+                    playPromise.catch(() => {
+                        // Fallback if crack_the_whip.mp3 is missing or cannot load in preview
+                        playSynthesizedWhipCrack();
+                    });
+                }
+            } catch (e) {
+                playSynthesizedWhipCrack();
+            }
+        }
+
+        function triggerWhipVisuals(byName, customQuote) {
+            const flash = document.getElementById('whip-flash');
+            if (flash) {
+                flash.classList.remove('opacity-0');
+                flash.classList.add('opacity-100');
+                setTimeout(() => {
+                    flash.classList.remove('opacity-100');
+                    flash.classList.add('opacity-0');
+                }, 180);
+            }
+            document.body.classList.remove('animate-whip-shake');
+            void document.body.offsetWidth; // Reflow to restart animation
+            document.body.classList.add('animate-whip-shake');
+
+            const quote = customQuote || WHIP_QUOTES[Math.floor(Math.random() * WHIP_QUOTES.length)];
+            showToast(`💥 *ZISCH!* ${byName} schwingt die Peitsche: „${quote}“`, 'ph-lightning text-rose-400');
+        }
+
+        async function playSound(type) {
+            if (!soundEnabled) return;
+            if (type === 'whip') {
+                playWhipSound();
+                return;
+            }
+            if (typeof Tone === 'undefined') return;
+            try {
+                if (Tone.context.state !== 'running') {
+                    await Tone.start();
+                }
+                const synth = new Tone.PolySynth(Tone.Synth, {
+                    oscillator: { type: "triangle" },
+                    envelope: { attack: 0.01, decay: 0.2, sustain: 0.1, release: 0.8 }
+                }).toDestination();
+                synth.volume.value = -8;
+
+                const now = Tone.now();
+                if (type === 'start') {
+                    synth.triggerAttackRelease(["C5", "E5", "G5"], "16n", now);
+                } else if (type === 'pause') {
+                    synth.triggerAttackRelease(["G4", "D4"], "16n", now);
+                } else if (type === 'complete') {
+                    synth.triggerAttackRelease("C5", "8n", now);
+                    synth.triggerAttackRelease("E5", "8n", now + 0.15);
+                    synth.triggerAttackRelease("G5", "8n", now + 0.30);
+                    synth.triggerAttackRelease("C6", "4n", now + 0.45);
+                } else if (type === 'nudge') {
+                    synth.triggerAttackRelease("A5", "16n", now);
+                    synth.triggerAttackRelease("E6", "16n", now + 0.1);
+                }
+            } catch (e) {
+                // Ignore audio context restrictions if user hasn't interacted yet
+            }
+        }
+
+        // --- 4. URL & ROOM CODE HELPERS ---
+        function getInitialRoomFromUrl() {
+            try {
+                const params = new URLSearchParams(window.location.search);
+                const roomParam = params.get('room');
+                if (roomParam && roomParam.trim().length > 0) {
+                    return sanitizeRoomCode(roomParam);
+                }
+                if (window.location.hash && window.location.hash.length > 1) {
+                    return sanitizeRoomCode(window.location.hash.substring(1));
+                }
+            } catch (e) {}
+            return `FOCUS-${Math.floor(1000 + Math.random() * 9000)}`;
+        }
+
+        function sanitizeRoomCode(raw) {
+            return raw.trim().toUpperCase().replace(/[^A-Z0-9-_]/g, '').substring(0, 24) || 'FOCUS-1000';
+        }
+
+        function buildInviteUrl(roomCode) {
+            try {
+                const url = new URL(window.location.href);
+                url.searchParams.set('room', roomCode);
+                url.hash = roomCode;
+                return url.toString();
+            } catch (e) {
+                return `${window.location.origin}${window.location.pathname}?room=${roomCode}#${roomCode}`;
+            }
+        }
+
+        // --- 5. UI ELEMENTS & TOAST ---
+        const els = {
+            currentRoomDisplay: document.getElementById('current-room-display'),
+            timeDisplay: document.getElementById('time-display'),
+            timerRing: document.getElementById('timer-ring'),
+            phaseBadge: document.getElementById('phase-badge'),
+            syncActionLog: document.getElementById('sync-action-log'),
+            btnStartPause: document.getElementById('btn-start-pause'),
+            playPauseIcon: document.getElementById('play-pause-icon'),
+            playPauseText: document.getElementById('play-pause-text'),
+            btnReset: document.getElementById('btn-reset'),
+            btnSkip: document.getElementById('btn-skip'),
+            completedCount: document.getElementById('completed-count'),
+            modeBtns: document.querySelectorAll('.mode-btn'),
+            bgGlow: document.getElementById('bg-glow'),
+            brandIcon: document.getElementById('brand-icon'),
+            inputUsername: document.getElementById('input-username'),
+            participantsList: document.getElementById('participants-list'),
+            participantCount: document.getElementById('participant-count'),
+            tasksContainer: document.getElementById('tasks-container'),
+            tasksBadge: document.getElementById('tasks-badge'),
+            formTask: document.getElementById('form-task'),
+            inputTask: document.getElementById('input-task'),
+            chatContainer: document.getElementById('chat-container'),
+            formChat: document.getElementById('form-chat'),
+            inputChat: document.getElementById('input-chat'),
+            userIdBadge: document.getElementById('user-id-badge'),
+            // Modals
+            modalShare: document.getElementById('modal-share'),
+            shareUrlInput: document.getElementById('share-url-input'),
+            shareCodeDisplay: document.getElementById('share-code-display'),
+            modalRoom: document.getElementById('modal-room'),
+            inputRoomCode: document.getElementById('input-room-code'),
+            modalSettings: document.getElementById('modal-settings'),
+        };
+
+        function showToast(message, iconClass = 'ph-check-circle text-emerald-400') {
+            const toast = document.getElementById('toast');
+            const toastMsg = document.getElementById('toast-msg');
+            const toastIcon = document.getElementById('toast-icon');
+            toastMsg.textContent = message;
+            toastIcon.className = `ph-fill ${iconClass} text-xl`;
+            toast.classList.remove('-translate-y-24', 'opacity-0');
+            toast.classList.add('translate-y-0', 'opacity-100');
+            setTimeout(() => {
+                toast.classList.add('-translate-y-24', 'opacity-0');
+                toast.classList.remove('translate-y-0', 'opacity-100');
+            }, 3200);
+        }
+
+        function copyTextToClipboard(text, successMsg) {
+            const tempInput = document.createElement('textarea');
+            tempInput.value = text;
+            document.body.appendChild(tempInput);
+            tempInput.select();
+            try {
+                document.execCommand('copy');
+                showToast(successMsg);
+            } catch (err) {
+                showToast('Kopieren fehlgeschlagen – bitte manuell markieren', 'ph-warning text-amber-400');
+            }
+            document.body.removeChild(tempInput);
+        }
+
+        // --- 6. CLOUD FIRESTORE INITIALIZATION & REAL-TIME ROOM SYNC ---
+        async function initAppAndSync() {
+            els.inputUsername.value = myName;
+            els.currentRoomDisplay.textContent = currentRoomId;
+
+            if (!firebaseConfig) {
+                showToast('Lokaler Modus aktiv', 'ph-info text-blue-400');
+                renderUI();
+                return;
+            }
+
+            try {
+                const app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
+                db = getFirestore(app);
+
+                // RULE 3: Authenticate FIRST before any Firestore query
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+
+                currentUser = auth.currentUser;
+                if (currentUser) {
+                    els.userIdBadge.textContent = `Verbunden • ID: ${currentUser.uid}`;
+                    await connectToRoom(currentRoomId);
+                }
+            } catch (err) {
+                console.error("Sync Init Error:", err);
+                showToast("Verbindungsfehler – prüfe deine Verbindung", "ph-warning text-rose-400");
+            }
+        }
+
+        function getRoomDocRef(roomId) {
+            // RULE 1: Strict Public Path for shared rooms
+            return doc(db, 'artifacts', appId, 'public', 'data', 'pomodoro_rooms', roomId);
+        }
+
+        async function connectToRoom(newRoomId) {
+            if (!currentUser || !db) return;
+
+            if (roomUnsubscribe) {
+                roomUnsubscribe();
+                roomUnsubscribe = null;
+            }
+
+            currentRoomId = sanitizeRoomCode(newRoomId);
+            els.currentRoomDisplay.textContent = currentRoomId;
+
+            // Update URL hash gently so page refreshes stay in the room
+            try {
+                window.history.replaceState(null, '', `?room=${currentRoomId}#${currentRoomId}`);
+            } catch (e) {}
+
+            const roomRef = getRoomDocRef(currentRoomId);
+
+            try {
+                const snap = await getDoc(roomRef);
+                const now = Date.now();
+                if (!snap.exists()) {
+                    // Initialize brand-new synchronized room
+                    const initialRoom = {
+                        mode: 'pomodoro',
+                        isRunning: false,
+                        remainingSeconds: 25 * 60,
+                        targetEndTime: null,
+                        durations: { pomodoro: 25 * 60, shortBreak: 5 * 60, longBreak: 15 * 60 },
+                        completedPomodoros: 0,
+                        lastActionBy: myName,
+                        lastActionText: `${myName} hat den Raum erstellt`,
+                        eventSignal: { id: crypto.randomUUID(), type: 'join', by: myName },
+                        participants: {
+                            [currentUser.uid]: { name: myName, lastSeen: now }
+                        },
+                        tasks: [],
+                        messages: []
+                    };
+                    await setDoc(roomRef, initialRoom);
+                } else {
+                    // Register presence in existing room
+                    const data = snap.data();
+                    const participants = data.participants || {};
+                    participants[currentUser.uid] = { name: myName, lastSeen: now };
+                    await updateDoc(roomRef, { participants });
+                }
+
+                // Listen to real-time updates
+                roomUnsubscribe = onSnapshot(
+                    roomRef,
+                    (docSnap) => {
+                        if (!docSnap.exists()) return;
+                        const data = docSnap.data();
+                        roomState = {
+                            ...roomState,
+                            ...data,
+                            durations: data.durations || { pomodoro: 1500, shortBreak: 300, longBreak: 900 },
+                            participants: data.participants || {},
+                            tasks: Array.isArray(data.tasks) ? data.tasks : [],
+                            messages: Array.isArray(data.messages) ? data.messages : []
+                        };
+
+                        // Check if a new sound/nudge signal arrived
+                        if (roomState.eventSignal && roomState.eventSignal.id !== lastPlayedEventId) {
+                            const sig = roomState.eventSignal;
+                            if (lastPlayedEventId !== null) {
+                                if (sig.type === 'start') playSound('start');
+                                if (sig.type === 'pause') playSound('pause');
+                                if (sig.type === 'complete') playSound('complete');
+                                if (sig.type === 'nudge') {
+                                    playSound('nudge');
+                                    showToast(`👋 ${sig.by} schickt ein High-Five!`, 'ph-hand-waving text-amber-400');
+                                }
+                                if (sig.type === 'whip') {
+                                    playSound('whip');
+                                    triggerWhipVisuals(sig.by, sig.quote);
+                                }
+                            }
+                            lastPlayedEventId = sig.id;
+                        }
+
+                        renderUI();
+                    },
+                    (error) => {
+                        console.error("Realtime listener error:", error);
+                    }
+                );
+            } catch (e) {
+                console.error("Error joining room:", e);
+            }
+        }
+
+        async function pushRoomUpdate(partialUpdate) {
+            // Apply locally immediately for snappy feel
+            roomState = { ...roomState, ...partialUpdate };
+            renderUI();
+
+            if (!currentUser || !db) return;
+            try {
+                const roomRef = getRoomDocRef(currentRoomId);
+                // Keep current user's heartbeat fresh
+                const updatedParticipants = { ...(roomState.participants || {}) };
+                updatedParticipants[currentUser.uid] = { name: myName, lastSeen: Date.now() };
+                await setDoc(roomRef, {
+                    ...roomState,
+                    ...partialUpdate,
+                    participants: updatedParticipants
+                }, { merge: true });
+            } catch (e) {
+                console.error("Update error:", e);
+            }
+        }
+
+        // --- 7. SYNCHRONIZED TIMER ENGINE ---
+        function getCalculatedRemainingSeconds() {
+            if (!roomState.isRunning || !roomState.targetEndTime) {
+                return Math.max(0, roomState.remainingSeconds || 0);
+            }
+            const diffMs = roomState.targetEndTime - Date.now();
+            return Math.max(0, Math.ceil(diffMs / 1000));
+        }
+
+        function formatTime(totalSeconds) {
+            const mins = Math.floor(totalSeconds / 60);
+            const secs = totalSeconds % 60;
+            return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+        }
+
+        async function toggleStartPause() {
+            const currentRem = getCalculatedRemainingSeconds();
+            if (roomState.isRunning) {
+                // Pause for everyone
+                await pushRoomUpdate({
+                    isRunning: false,
+                    remainingSeconds: currentRem,
+                    targetEndTime: null,
+                    lastActionBy: myName,
+                    lastActionText: `${myName} hat pausiert`,
+                    eventSignal: { id: crypto.randomUUID(), type: 'pause', by: myName }
+                });
+            } else {
+                // Start for everyone using a unified target timestamp
+                const durationToRun = currentRem > 0 ? currentRem : (roomState.durations[roomState.mode] || 1500);
+                const targetEndTime = Date.now() + durationToRun * 1000;
+                await pushRoomUpdate({
+                    isRunning: true,
+                    remainingSeconds: durationToRun,
+                    targetEndTime: targetEndTime,
+                    lastActionBy: myName,
+                    lastActionText: `${myName} hat den Timer gestartet`,
+                    eventSignal: { id: crypto.randomUUID(), type: 'start', by: myName }
+                });
+            }
+        }
+
+        async function resetTimer() {
+            const defaultSecs = roomState.durations[roomState.mode] || 1500;
+            await pushRoomUpdate({
+                isRunning: false,
+                remainingSeconds: defaultSecs,
+                targetEndTime: null,
+                lastActionBy: myName,
+                lastActionText: `${myName} hat den Timer zurückgesetzt`,
+                eventSignal: { id: crypto.randomUUID(), type: 'pause', by: myName }
+            });
+        }
+
+        async function switchMode(newMode, autoCompleted = false) {
+            const newDuration = roomState.durations[newMode] || 1500;
+            const newCompleted = autoCompleted && roomState.mode === 'pomodoro'
+                ? (roomState.completedPomodoros || 0) + 1
+                : (roomState.completedPomodoros || 0);
+
+            const modeLabel = newMode === 'pomodoro' ? 'Fokus' : (newMode === 'shortBreak' ? 'Kurze Pause' : 'Lange Pause');
+            await pushRoomUpdate({
+                mode: newMode,
+                isRunning: false,
+                remainingSeconds: newDuration,
+                targetEndTime: null,
+                completedPomodoros: newCompleted,
+                lastActionBy: myName,
+                lastActionText: autoCompleted
+                    ? `Phase beendet! Bereit für ${modeLabel}`
+                    : `${myName} wechselte zu ${modeLabel}`,
+                eventSignal: {
+                    id: crypto.randomUUID(),
+                    type: autoCompleted ? 'complete' : 'pause',
+                    by: myName
+                }
+            });
+        }
+
+        // Local high-precision tick loop (runs every 250ms)
+        setInterval(() => {
+            if (roomState.isRunning) {
+                const rem = getCalculatedRemainingSeconds();
+                updateClockAndRingDOM(rem);
+                if (rem <= 0) {
+                    // Phase finished! Move to next phase automatically
+                    const nextMode = roomState.mode === 'pomodoro' ? 'shortBreak' : 'pomodoro';
+                    switchMode(nextMode, true);
+                }
+            }
+        }, 250);
+
+        // Heartbeat every 25 seconds so participants list stays accurate
+        setInterval(() => {
+            if (currentUser && db) {
+                const roomRef = getRoomDocRef(currentRoomId);
+                const updatedParticipants = { ...(roomState.participants || {}) };
+                updatedParticipants[currentUser.uid] = { name: myName, lastSeen: Date.now() };
+                updateDoc(roomRef, { participants: updatedParticipants }).catch(() => {});
+            }
+        }, 25000);
+
+        // --- 8. RENDER UI & THEME UPDATES ---
+        function updateClockAndRingDOM(remSeconds) {
+            const formatted = formatTime(remSeconds);
+            els.timeDisplay.textContent = formatted;
+            document.title = `(${formatted}) SyncPomodoro • ${currentRoomId}`;
+
+            const totalSecs = roomState.durations[roomState.mode] || 1500;
+            const fraction = Math.max(0, Math.min(1, remSeconds / totalSecs));
+            const offset = RING_CIRCUMFERENCE - fraction * RING_CIRCUMFERENCE;
+            els.timerRing.style.strokeDashoffset = offset;
+        }
+
+        function renderUI() {
+            const rem = getCalculatedRemainingSeconds();
+            updateClockAndRingDOM(rem);
+
+            // Theme colors per mode
+            const themes = {
+                pomodoro: {
+                    color: '#f43f5e',
+                    label: 'Fokus-Phase',
+                    badgeClass: 'bg-rose-500/15 text-rose-400 border-rose-500/30',
+                    btnClass: 'bg-rose-600 hover:bg-rose-500 shadow-rose-600/25',
+                    glowClass: 'from-rose-600/40 via-slate-900 to-slate-950',
+                    iconClass: 'bg-rose-500/20 border-rose-500/40 text-rose-400'
+                },
+                shortBreak: {
+                    color: '#10b981',
+                    label: 'Kurze Pause',
+                    badgeClass: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
+                    btnClass: 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-600/25',
+                    glowClass: 'from-emerald-600/40 via-slate-900 to-slate-950',
+                    iconClass: 'bg-emerald-500/20 border-emerald-500/40 text-emerald-400'
+                },
+                longBreak: {
+                    color: '#3b82f6',
+                    label: 'Lange Pause',
+                    badgeClass: 'bg-blue-500/15 text-blue-400 border-blue-500/30',
+                    btnClass: 'bg-blue-600 hover:bg-blue-500 shadow-blue-600/25',
+                    glowClass: 'from-blue-600/40 via-slate-900 to-slate-950',
+                    iconClass: 'bg-blue-500/20 border-blue-500/40 text-blue-400'
+                }
+            };
+
+            const activeTheme = themes[roomState.mode] || themes.pomodoro;
+            els.timerRing.style.stroke = activeTheme.color;
+            els.phaseBadge.textContent = activeTheme.label;
+            els.phaseBadge.className = `text-xs font-bold uppercase tracking-widest px-3 py-1 rounded-full border mb-2 ${activeTheme.badgeClass}`;
+            els.bgGlow.className = `fixed inset-0 pointer-events-none transition-colors duration-1000 opacity-20 bg-gradient-to-br ${activeTheme.glowClass} z-0`;
+            els.brandIcon.className = `w-10 h-10 rounded-xl border flex items-center justify-center shadow-lg transition-colors duration-500 ${activeTheme.iconClass}`;
+
+            // Mode tab buttons
+            els.modeBtns.forEach(btn => {
+                const m = btn.getAttribute('data-mode');
+                const mins = Math.round((roomState.durations[m] || 1500) / 60);
+                const labelSpan = btn.querySelector('span');
+                if (m === 'pomodoro') labelSpan.textContent = `Fokus (${mins}m)`;
+                if (m === 'shortBreak') labelSpan.textContent = `Pause (${mins}m)`;
+                if (m === 'longBreak') labelSpan.textContent = `Lang (${mins}m)`;
+
+                if (m === roomState.mode) {
+                    const activeTabBg = m === 'pomodoro' ? 'bg-rose-600' : (m === 'shortBreak' ? 'bg-emerald-600' : 'bg-blue-600');
+                    btn.className = `mode-btn py-2.5 px-3 rounded-xl text-xs sm:text-sm font-semibold transition-all flex items-center justify-center gap-1.5 ${activeTabBg} text-white shadow-lg`;
+                } else {
+                    btn.className = `mode-btn py-2.5 px-3 rounded-xl text-xs sm:text-sm font-semibold transition-all flex items-center justify-center gap-1.5 text-slate-400 hover:text-white`;
+                }
+            });
+
+            // Start / Pause Button state
+            els.btnStartPause.className = `flex-1 py-4 px-8 rounded-2xl active:scale-95 text-white font-bold text-lg tracking-wide shadow-xl transition-all flex items-center justify-center gap-3 ${activeTheme.btnClass}`;
+            if (roomState.isRunning) {
+                els.playPauseIcon.className = 'ph-fill ph-pause text-2xl';
+                els.playPauseText.textContent = 'Für beide pausieren';
+            } else {
+                els.playPauseIcon.className = 'ph-fill ph-play text-2xl';
+                els.playPauseText.textContent = 'Für beide starten';
+            }
+
+            els.syncActionLog.textContent = roomState.lastActionText || 'Bereit';
+            els.completedCount.textContent = roomState.completedPomodoros || 0;
+
+            // Render Active Participants (filter out stale > 2 minutes)
+            const now = Date.now();
+            const entries = Object.entries(roomState.participants || {}).filter(([uid, p]) => {
+                return (now - (p.lastSeen || 0)) < 120000;
+            });
+            els.participantCount.textContent = Math.max(1, entries.length);
+            els.participantsList.innerHTML = '';
+
+            if (entries.length === 0) {
+                entries.push([currentUser?.uid || 'local', { name: myName }]);
+            }
+
+            entries.forEach(([uid, p]) => {
+                const isMe = currentUser && uid === currentUser.uid;
+                const badge = document.createElement('div');
+                badge.className = `flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-medium border ${
+                    isMe ? 'bg-indigo-500/15 border-indigo-500/40 text-indigo-200' : 'bg-slate-800/90 border-slate-700 text-slate-200'
+                }`;
+                badge.innerHTML = `
+                    <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                    <span>${escapeHtml(p.name || 'Freund')}${isMe ? ' (Du)' : ''}</span>
+                `;
+                els.participantsList.appendChild(badge);
+            });
+
+            // Render Shared Tasks
+            const tasks = roomState.tasks || [];
+            els.tasksBadge.textContent = tasks.filter(t => !t.done).length;
+            els.tasksContainer.innerHTML = '';
+            if (tasks.length === 0) {
+                els.tasksContainer.innerHTML = `<p class="text-xs text-slate-500 text-center my-8">Keine offenen Aufgaben. Fügt euer gemeinsames Fokus-Ziel hinzu!</p>`;
+            } else {
+                tasks.forEach(task => {
+                    const row = document.createElement('div');
+                    row.className = `flex items-center justify-between gap-2 p-2.5 rounded-xl bg-slate-950/70 border border-slate-800/80 group`;
+                    row.innerHTML = `
+                        <button data-toggle-id="${task.id}" class="flex items-center gap-2.5 text-left flex-1 min-w-0">
+                            <i class="ph-bold ${task.done ? 'ph-check-circle text-emerald-400' : 'ph-circle text-slate-500'} text-base shrink-0"></i>
+                            <div class="truncate">
+                                <span class="text-xs ${task.done ? 'line-through text-slate-500' : 'text-slate-200'}">${escapeHtml(task.text)}</span>
+                                <span class="block text-[10px] text-slate-500">von ${escapeHtml(task.author || 'Team')}</span>
+                            </div>
+                        </button>
+                        <button data-delete-id="${task.id}" class="p-1 text-slate-500 hover:text-rose-400 opacity-70 group-hover:opacity-100 transition">
+                            <i class="ph-bold ph-trash text-xs"></i>
+                        </button>
+                    `;
+                    els.tasksContainer.appendChild(row);
+                });
+            }
+
+            // Render Chat Messages
+            const msgs = roomState.messages || [];
+            els.chatContainer.innerHTML = '';
+            if (msgs.length === 0) {
+                els.chatContainer.innerHTML = `<p class="text-xs text-slate-500 text-center my-8">Noch keine Nachrichten im Raum.</p>`;
+            } else {
+                msgs.slice(-30).forEach(m => {
+                    const bubble = document.createElement('div');
+                    bubble.className = 'p-2.5 rounded-xl bg-slate-950/70 border border-slate-800/80 text-xs';
+                    bubble.innerHTML = `
+                        <div class="flex justify-between text-[10px] text-slate-400 mb-0.5">
+                            <span class="font-bold text-indigo-400">${escapeHtml(m.sender)}</span>
+                            <span>${escapeHtml(m.time)}</span>
+                        </div>
+                        <p class="text-slate-200 break-words">${escapeHtml(m.text)}</p>
+                    `;
+                    els.chatContainer.appendChild(bubble);
+                });
+                els.chatContainer.scrollTop = els.chatContainer.scrollHeight;
+            }
+        }
+
+        function escapeHtml(str) {
+            return String(str || '').replace(/[&<>"']/g, s => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            }[s]));
+        }
+
+        // --- 9. EVENT LISTENERS ---
+        els.btnStartPause.addEventListener('click', toggleStartPause);
+        els.btnReset.addEventListener('click', resetTimer);
+        els.btnSkip.addEventListener('click', () => {
+            const next = roomState.mode === 'pomodoro' ? 'shortBreak' : 'pomodoro';
+            switchMode(next, false);
+        });
+
+        els.modeBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const targetMode = btn.getAttribute('data-mode');
+                if (targetMode !== roomState.mode) {
+                    switchMode(targetMode, false);
+                }
+            });
+        });
+
+        // Username update
+        els.inputUsername.addEventListener('change', () => {
+            const val = els.inputUsername.value.trim();
+            if (val) {
+                myName = val;
+                pushRoomUpdate({});
+                showToast(`Name geändert zu ${myName}`);
+            }
+        });
+
+        // Sound toggle
+        document.getElementById('btn-sound-toggle').addEventListener('click', () => {
+            soundEnabled = !soundEnabled;
+            const icon = document.getElementById('sound-icon');
+            if (soundEnabled) {
+                icon.className = 'ph-bold ph-speaker-high text-base text-emerald-400';
+                playSound('start');
+                showToast('Signalton aktiviert');
+            } else {
+                icon.className = 'ph-bold ph-speaker-slash text-base text-slate-500';
+                showToast('Signalton stummgeschaltet', 'ph-speaker-slash text-slate-400');
+            }
+        });
+
+        // Nudge / High-Five button
+        document.getElementById('btn-nudge').addEventListener('click', async () => {
+            playSound('nudge');
+            await pushRoomUpdate({
+                lastActionBy: myName,
+                lastActionText: `${myName} hat ein High-Five geschickt 👋`,
+                eventSignal: { id: crypto.randomUUID(), type: 'nudge', by: myName }
+            });
+        });
+
+        // Whip / Motivations-Peitsche button
+        const btnWhip = document.getElementById('btn-whip');
+        btnWhip.addEventListener('click', async () => {
+            const now = Date.now();
+            if (now - lastWhipTime < 2000) {
+                showToast('Kurze Verschnaufpause für den Peitschen-Arm! (2 Sek.)', 'ph-timer text-amber-400');
+                return;
+            }
+            lastWhipTime = now;
+
+            const randomQuote = WHIP_QUOTES[Math.floor(Math.random() * WHIP_QUOTES.length)];
+            const signalId = crypto.randomUUID();
+            // Prevent double-triggering via snapshot listener on our own client
+            lastPlayedEventId = signalId;
+
+            playSound('whip');
+            triggerWhipVisuals(myName, randomQuote);
+
+            const nowStr = new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+            const updatedMessages = [...(roomState.messages || []).slice(-29), {
+                id: crypto.randomUUID(),
+                sender: '💥 Motivations-Peitsche',
+                text: `${myName} knallt die Peitsche: „${randomQuote}“`,
+                time: nowStr
+            }];
+
+            await pushRoomUpdate({
+                lastActionBy: myName,
+                lastActionText: `💥 ${myName} schwingt die Peitsche!`,
+                eventSignal: { id: signalId, type: 'whip', by: myName, quote: randomQuote },
+                messages: updatedMessages
+            });
+        });
+
+        // Tasks & Chat Tabs
+        const tabTasks = document.getElementById('tab-tasks');
+        const tabChat = document.getElementById('tab-chat');
+        const viewTasks = document.getElementById('view-tasks');
+        const viewChat = document.getElementById('view-chat');
+
+        tabTasks.addEventListener('click', () => {
+            viewTasks.classList.remove('hidden');
+            viewChat.classList.add('hidden');
+            tabTasks.className = 'px-3 py-1.5 rounded-xl bg-slate-800 text-white text-xs font-semibold flex items-center gap-1.5 transition';
+            tabChat.className = 'px-3 py-1.5 rounded-xl text-slate-400 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition';
+        });
+
+        tabChat.addEventListener('click', () => {
+            viewChat.classList.remove('hidden');
+            viewTasks.classList.add('hidden');
+            tabChat.className = 'px-3 py-1.5 rounded-xl bg-slate-800 text-white text-xs font-semibold flex items-center gap-1.5 transition';
+            tabTasks.className = 'px-3 py-1.5 rounded-xl text-slate-400 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition';
+        });
+
+        // Add Task
+        els.formTask.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const text = els.inputTask.value.trim();
+            if (!text) return;
+            els.inputTask.value = '';
+            const updatedTasks = [...(roomState.tasks || []), {
+                id: crypto.randomUUID(),
+                text,
+                done: false,
+                author: myName
+            }];
+            await pushRoomUpdate({ tasks: updatedTasks });
+        });
+
+        // Toggle / Delete Task Delegation
+        els.tasksContainer.addEventListener('click', async (e) => {
+            const toggleBtn = e.target.closest('[data-toggle-id]');
+            const deleteBtn = e.target.closest('[data-delete-id]');
+            if (toggleBtn) {
+                const id = toggleBtn.getAttribute('data-toggle-id');
+                const updatedTasks = (roomState.tasks || []).map(t => t.id === id ? { ...t, done: !t.done } : t);
+                await pushRoomUpdate({ tasks: updatedTasks });
+            } else if (deleteBtn) {
+                const id = deleteBtn.getAttribute('data-delete-id');
+                const updatedTasks = (roomState.tasks || []).filter(t => t.id !== id);
+                await pushRoomUpdate({ tasks: updatedTasks });
+            }
+        });
+
+        // Send Chat Message
+        els.formChat.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const text = els.inputChat.value.trim();
+            if (!text) return;
+            els.inputChat.value = '';
+            const nowStr = new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+            const updatedMessages = [...(roomState.messages || []).slice(-29), {
+                id: crypto.randomUUID(),
+                sender: myName,
+                text,
+                time: nowStr
+            }];
+            await pushRoomUpdate({ messages: updatedMessages });
+        });
+
+        // Share Modal
+        document.getElementById('btn-share').addEventListener('click', () => {
+            els.shareUrlInput.value = buildInviteUrl(currentRoomId);
+            els.shareCodeDisplay.textContent = currentRoomId;
+            els.modalShare.classList.remove('hidden');
+            els.modalShare.classList.add('flex');
+        });
+
+        const closeShare = () => {
+            els.modalShare.classList.add('hidden');
+            els.modalShare.classList.remove('flex');
+        };
+        document.getElementById('close-share-modal').addEventListener('click', closeShare);
+        document.getElementById('btn-done-share').addEventListener('click', closeShare);
+
+        document.getElementById('btn-copy-url').addEventListener('click', () => {
+            copyTextToClipboard(els.shareUrlInput.value, 'Einladungslink kopiert!');
+        });
+        document.getElementById('btn-copy-code').addEventListener('click', () => {
+            copyTextToClipboard(currentRoomId, `Raum-Code ${currentRoomId} kopiert!`);
+        });
+
+        // Change Room Modal
+        document.getElementById('btn-change-room').addEventListener('click', () => {
+            els.inputRoomCode.value = currentRoomId;
+            els.modalRoom.classList.remove('hidden');
+            els.modalRoom.classList.add('flex');
+            els.inputRoomCode.focus();
+        });
+
+        const closeRoomModal = () => {
+            els.modalRoom.classList.add('hidden');
+            els.modalRoom.classList.remove('flex');
+        };
+        document.getElementById('close-room-modal').addEventListener('click', closeRoomModal);
+
+        document.getElementById('btn-random-room').addEventListener('click', () => {
+            els.inputRoomCode.value = `FOCUS-${Math.floor(1000 + Math.random() * 9000)}`;
+        });
+
+        document.getElementById('form-join-room').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const code = sanitizeRoomCode(els.inputRoomCode.value);
+            closeRoomModal();
+            await connectToRoom(code);
+            showToast(`Raum ${code} betreten!`);
+        });
+
+        // Custom Duration Modal
+        document.getElementById('btn-custom-times').addEventListener('click', () => {
+            document.getElementById('set-pomodoro').value = Math.round((roomState.durations.pomodoro || 1500) / 60);
+            document.getElementById('set-short').value = Math.round((roomState.durations.shortBreak || 300) / 60);
+            document.getElementById('set-long').value = Math.round((roomState.durations.longBreak || 900) / 60);
+            els.modalSettings.classList.remove('hidden');
+            els.modalSettings.classList.add('flex');
+        });
+
+        const closeSettingsModal = () => {
+            els.modalSettings.classList.add('hidden');
+            els.modalSettings.classList.remove('flex');
+        };
+        document.getElementById('close-settings-modal').addEventListener('click', closeSettingsModal);
+
+        document.getElementById('form-settings').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const p = Math.max(1, Math.min(120, parseInt(document.getElementById('set-pomodoro').value) || 25)) * 60;
+            const s = Math.max(1, Math.min(60, parseInt(document.getElementById('set-short').value) || 5)) * 60;
+            const l = Math.max(1, Math.min(90, parseInt(document.getElementById('set-long').value) || 15)) * 60;
+
+            const newDurations = { pomodoro: p, shortBreak: s, longBreak: l };
+            const newRemaining = newDurations[roomState.mode];
+
+            closeSettingsModal();
+            await pushRoomUpdate({
+                durations: newDurations,
+                isRunning: false,
+                remainingSeconds: newRemaining,
+                targetEndTime: null,
+                lastActionBy: myName,
+                lastActionText: `${myName} hat die Timer-Zeiten angepasst`
+            });
+            showToast('Zeiten für den gesamten Raum aktualisiert!');
+        });
+
+        // Start App
+        window.addEventListener('DOMContentLoaded', initAppAndSync);
+    </script>
+</body>
+</html>
